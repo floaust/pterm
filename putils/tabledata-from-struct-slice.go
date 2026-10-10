@@ -10,15 +10,17 @@ import (
 // The table will be populated with the values of the structs. The header will be set to the structs field name.
 // Use .WithHasHeader() to color the header.
 // The function will return the populated pterm.TablePrinter.
-func TableFromStructSlice(tablePrinter pterm.TablePrinter, structSlice interface{}) *pterm.TablePrinter {
+func TableFromStructSlice(tablePrinter pterm.TablePrinter, structSlice any) *pterm.TablePrinter {
 	to := reflect.TypeOf(structSlice)
 	if to.Kind() != reflect.Slice {
 		return &tablePrinter
 	}
+
 	el := to.Elem()
 
 	isPointer := false
-	if el.Kind() == reflect.Ptr {
+
+	if el.Kind() == reflect.Pointer {
 		el = el.Elem()
 		isPointer = true
 	}
@@ -30,7 +32,7 @@ func TableFromStructSlice(tablePrinter pterm.TablePrinter, structSlice interface
 	numFields := el.NumField()
 	fieldNames := make([]string, numFields)
 
-	for i := 0; i < numFields; i++ {
+	for i := range numFields {
 		fieldNames[i] = el.Field(i).Name
 	}
 
@@ -40,7 +42,7 @@ func TableFromStructSlice(tablePrinter pterm.TablePrinter, structSlice interface
 
 	obj := reflect.ValueOf(structSlice)
 
-	items := make([]interface{}, obj.Len())
+	items := make([]any, obj.Len())
 	for i := 0; i < obj.Len(); i++ {
 		if isPointer {
 			items[i] = obj.Index(i).Elem().Interface()
@@ -51,13 +53,16 @@ func TableFromStructSlice(tablePrinter pterm.TablePrinter, structSlice interface
 
 	for _, v := range items {
 		item := reflect.ValueOf(v)
+
 		record := make([]string, numFields)
-		for i := 0; i < numFields; i++ {
+		for i := range numFields {
 			fieldVal := item.Field(i).Interface()
 			record[i] = pterm.Sprintf("%v", fieldVal)
 		}
+
 		records = append(records, record)
 	}
+
 	tablePrinter.Data = records
 
 	return &tablePrinter
@@ -66,6 +71,6 @@ func TableFromStructSlice(tablePrinter pterm.TablePrinter, structSlice interface
 // DefaultTableFromStructSlice will be populate the pterm.DefaultTable with the values of the structs. The header will be set to the structs field name.
 // Use .WithHasHeader() to color the header.
 // The function will return the populated pterm.TablePrinter.
-func DefaultTableFromStructSlice(structSlice interface{}) *pterm.TablePrinter {
+func DefaultTableFromStructSlice(structSlice any) *pterm.TablePrinter {
 	return TableFromStructSlice(pterm.DefaultTable, structSlice)
 }

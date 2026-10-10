@@ -1,6 +1,10 @@
-# section
+### section/demo
 
-![Animation](animation.svg)
+![Animation](https://vhs.charm.sh/vhs-1Wv6LwKgaw4o36p5quakV1.gif)
+
+<details>
+
+<summary>SHOW SOURCE</summary>
 
 ```go
 package main
@@ -8,15 +12,15 @@ package main
 import "github.com/pterm/pterm"
 
 func main() {
-	// Print a section with level one.
+	// Sections structure long output into headed blocks, like chapters.
 	pterm.DefaultSection.Println("This is a section!")
-	// Print placeholder.
 	pterm.Info.Println("And here is some text.\nThis text could be anything.\nBasically it's just a placeholder")
 
-	// Print a section with level two.
+	// Higher levels render as smaller subsections.
 	pterm.DefaultSection.WithLevel(2).Println("This is another section!")
-	// Print placeholder.
 	pterm.Info.Println("And this is\nmore placeholder text")
 }
-
 ```
+
+</details>
+

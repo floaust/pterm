@@ -4,7 +4,8 @@ var (
 	// ThemeDefault is the default theme used by PTerm.
 	// If this variable is overwritten, the new value is used as default theme.
 	ThemeDefault = Theme{
-		PrimaryStyle:            Style{FgCyan},
+		DefaultText:             Style{FgDefault, BgDefault},
+		PrimaryStyle:            Style{FgLightCyan},
 		SecondaryStyle:          Style{FgLightMagenta},
 		HighlightStyle:          Style{Bold, FgYellow},
 		InfoMessageStyle:        Style{FgLightCyan},
@@ -16,32 +17,55 @@ var (
 		ErrorMessageStyle:       Style{FgLightRed},
 		ErrorPrefixStyle:        Style{FgBlack, BgLightRed},
 		FatalMessageStyle:       Style{FgLightRed},
-		FatalPrefixStyle:        Style{FgBlack, BgLightRed},
+		FatalPrefixStyle:        Style{FgLightWhite, BgRed, Bold},
 		DescriptionMessageStyle: Style{FgDefault},
 		DescriptionPrefixStyle:  Style{FgLightWhite, BgDarkGray},
 		ScopeStyle:              Style{FgGray},
 		ProgressbarBarStyle:     Style{FgCyan},
 		ProgressbarTitleStyle:   Style{FgLightCyan},
-		HeaderTextStyle:         Style{FgLightWhite, Bold},
-		HeaderBackgroundStyle:   Style{BgGray},
+		ProgressbarFillerStyle:  Style{FgDarkGray},
+		HeaderTextStyle:         Style{FgBlack, Bold},
+		HeaderBackgroundStyle:   Style{BgCyan},
 		SpinnerStyle:            Style{FgLightCyan},
 		SpinnerTextStyle:        Style{FgLightWhite},
 		TableStyle:              Style{FgDefault},
-		TableHeaderStyle:        Style{FgLightCyan},
+		TableHeaderStyle:        Style{Bold, FgLightCyan},
 		TableSeparatorStyle:     Style{FgGray},
-		SectionStyle:            Style{Bold, FgYellow},
+		HeatmapStyle:            Style{FgDefault},
+		HeatmapHeaderStyle:      Style{FgLightCyan},
+		HeatmapSeparatorStyle:   Style{FgGray},
+		SectionStyle:            Style{Bold, FgLightMagenta},
 		BulletListTextStyle:     Style{FgDefault},
-		BulletListBulletStyle:   Style{FgGray},
+		BulletListBulletStyle:   Style{FgCyan},
 		TreeStyle:               Style{FgGray},
 		TreeTextStyle:           Style{FgDefault},
 		LetterStyle:             Style{FgDefault},
 		DebugMessageStyle:       Style{FgGray},
 		DebugPrefixStyle:        Style{FgBlack, BgGray},
-		BoxStyle:                Style{FgDefault},
+		BoxStyle:                Style{FgGray},
 		BoxTextStyle:            Style{FgDefault},
+		BoxTitleStyle:           Style{Bold, FgLightCyan},
 		BarLabelStyle:           Style{FgLightCyan},
 		BarStyle:                Style{FgCyan},
 		TimerStyle:              Style{FgGray},
+		LoggerTraceStyle:        Style{Bold, FgGray},
+		LoggerDebugStyle:        Style{Bold, FgBlue},
+		LoggerInfoStyle:         Style{Bold, FgCyan},
+		LoggerWarnStyle:         Style{Bold, FgYellow},
+		LoggerErrorStyle:        Style{Bold, FgRed},
+		LoggerFatalStyle:        Style{Bold, FgLightWhite, BgRed},
+		LoggerPrintStyle:        Style{Bold, FgWhite},
+		LoggerFatalKeyStyle:     Style{FgRed, Bold},
+		LoggerTimestampStyle:    Style{FgGray},
+		LoggerCallerStyle:       Style{FgGray},
+		HeatmapTextColor:        FgBlack,
+		HeatmapColors:           []Color{BgRed, BgLightRed, BgYellow, BgLightYellow, BgLightGreen, BgGreen},
+		HeatmapTextRGB:          RGB{0, 0, 0, false},
+		HeatmapRGBRange:         []RGB{{R: 255, G: 0, B: 0, Background: true}, {R: 255, G: 165, B: 0, Background: true}, {R: 0, G: 255, B: 0, Background: true}},
+		Checkmark: Checkmark{
+			Checked:   Green("✓"),
+			Unchecked: Red("✗"),
+		},
 	}
 )
 
@@ -49,6 +73,7 @@ var (
 // Theme contains every Style used in PTerm. You can create own themes for your application or use one
 // of the existing themes.
 type Theme struct {
+	DefaultText             Style
 	PrimaryStyle            Style
 	SecondaryStyle          Style
 	HighlightStyle          Style
@@ -67,26 +92,55 @@ type Theme struct {
 	ScopeStyle              Style
 	ProgressbarBarStyle     Style
 	ProgressbarTitleStyle   Style
-	HeaderTextStyle         Style
-	HeaderBackgroundStyle   Style
-	SpinnerStyle            Style
-	SpinnerTextStyle        Style
-	TimerStyle              Style
-	TableStyle              Style
-	TableHeaderStyle        Style
-	TableSeparatorStyle     Style
-	SectionStyle            Style
-	BulletListTextStyle     Style
-	BulletListBulletStyle   Style
-	TreeStyle               Style
-	TreeTextStyle           Style
-	LetterStyle             Style
-	DebugMessageStyle       Style
-	DebugPrefixStyle        Style
-	BoxStyle                Style
-	BoxTextStyle            Style
-	BarLabelStyle           Style
-	BarStyle                Style
+	// ProgressbarFillerStyle styles the unfilled track of the Progressbar
+	// (the BarFiller characters).
+	ProgressbarFillerStyle Style
+	HeaderTextStyle        Style
+	HeaderBackgroundStyle  Style
+	SpinnerStyle           Style
+	SpinnerTextStyle       Style
+	TimerStyle             Style
+	TableStyle             Style
+	TableHeaderStyle       Style
+	TableSeparatorStyle    Style
+	HeatmapStyle           Style
+	HeatmapHeaderStyle     Style
+	HeatmapSeparatorStyle  Style
+	SectionStyle           Style
+	BulletListTextStyle    Style
+	BulletListBulletStyle  Style
+	TreeStyle              Style
+	TreeTextStyle          Style
+	LetterStyle            Style
+	DebugMessageStyle      Style
+	DebugPrefixStyle       Style
+	BoxStyle               Style
+	BoxTextStyle           Style
+	// BoxTitleStyle styles the title of a BoxPrinter.
+	BoxTitleStyle Style
+	BarLabelStyle Style
+	BarStyle      Style
+	// LoggerTraceStyle till LoggerPrintStyle style the level prefix of the
+	// Logger, one field per LogLevel.
+	LoggerTraceStyle Style
+	LoggerDebugStyle Style
+	LoggerInfoStyle  Style
+	LoggerWarnStyle  Style
+	LoggerErrorStyle Style
+	LoggerFatalStyle Style
+	LoggerPrintStyle Style
+	// LoggerFatalKeyStyle styles the argument keys of fatal logs, whose level
+	// style (background) would be too heavy to repeat on every key.
+	LoggerFatalKeyStyle  Style
+	LoggerTimestampStyle Style
+	LoggerCallerStyle    Style
+	// HeatmapTextColor, HeatmapColors, HeatmapTextRGB and HeatmapRGBRange are
+	// the default cell colors of the HeatmapPrinter.
+	HeatmapTextColor Color
+	HeatmapColors    []Color
+	HeatmapTextRGB   RGB
+	HeatmapRGBRange  []RGB
+	Checkmark        Checkmark
 }
 
 // WithPrimaryStyle returns a new theme with overridden value.

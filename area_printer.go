@@ -1,9 +1,10 @@
 package pterm
 
 import (
+	"io"
 	"strings"
 
-	"github.com/atomicgo/cursor"
+	"atomicgo.dev/cursor"
 
 	"github.com/pterm/pterm/internal"
 )
@@ -20,6 +21,7 @@ type AreaPrinter struct {
 
 	content  string
 	isActive bool
+	writer   cursor.Writer
 
 	area *cursor.Area
 }
@@ -47,15 +49,37 @@ func (p AreaPrinter) WithCenter(b ...bool) *AreaPrinter {
 	return &p
 }
 
+// SetWriter sets the writer for the AreaPrinter.
+// The writer must provide a file descriptor (like os.Stdout or os.Stderr) so
+// the cursor can be moved; other writers are silently ignored.
+func (p *AreaPrinter) SetWriter(writer io.Writer) {
+	if w, ok := writer.(cursor.Writer); ok {
+		p.writer = w
+	}
+}
+
+// newArea creates a cursor area honoring the configured writer.
+func (p *AreaPrinter) newArea() cursor.Area {
+	area := cursor.NewArea()
+	if p.writer != nil {
+		area = area.WithWriter(p.writer)
+	}
+
+	return area
+}
+
 // Update overwrites the content of the AreaPrinter.
 // Can be used live.
-func (p *AreaPrinter) Update(text ...interface{}) {
+func (p *AreaPrinter) Update(text ...any) {
 	if p.area == nil {
-		newArea := cursor.NewArea()
+		newArea := p.newArea()
 		p.area = &newArea
 	}
+
 	str := Sprint(text...)
 	p.content = str
+
+	str = strings.Join(internal.WrapText(str, GetTerminalWidth()), "\n")
 
 	if p.Center {
 		str = DefaultCenter.Sprint(str)
@@ -79,14 +103,15 @@ func (p *AreaPrinter) Update(text ...interface{}) {
 			str += strings.Repeat("\n", bottomPadding)
 		}
 	}
+
 	p.area.Update(str)
 }
 
 // Start the AreaPrinter.
-func (p *AreaPrinter) Start(text ...interface{}) (*AreaPrinter, error) {
+func (p *AreaPrinter) Start(text ...any) (*AreaPrinter, error) {
 	p.isActive = true
 	str := Sprint(text...)
-	newArea := cursor.NewArea()
+	newArea := p.newArea()
 	p.area = &newArea
 
 	p.Update(str)
@@ -97,10 +122,15 @@ func (p *AreaPrinter) Start(text ...interface{}) (*AreaPrinter, error) {
 // Stop terminates the AreaPrinter immediately.
 // The AreaPrinter will not resolve into anything.
 func (p *AreaPrinter) Stop() error {
+	if !p.isActive {
+		return nil
+	}
+
 	p.isActive = false
 	if p.RemoveWhenDone {
 		p.Clear()
 	}
+
 	return nil
 }
 
@@ -110,6 +140,7 @@ func (p *AreaPrinter) Stop() error {
 func (p *AreaPrinter) GenericStart() (*LivePrinter, error) {
 	_, _ = p.Start()
 	lp := LivePrinter(p)
+
 	return &lp, nil
 }
 
@@ -119,11 +150,12 @@ func (p *AreaPrinter) GenericStart() (*LivePrinter, error) {
 func (p *AreaPrinter) GenericStop() (*LivePrinter, error) {
 	_ = p.Stop()
 	lp := LivePrinter(p)
+
 	return &lp, nil
 }
 
-// Wrapper function that clears the content of the Area.
-// Moves the cursor to the bottom of the terminal, clears n lines upwards from
+// Clear is a Wrapper function that clears the content of the Area
+// moves the cursor to the bottom of the terminal, clears n lines upwards from
 // the current position and moves the cursor again.
 func (p *AreaPrinter) Clear() {
 	p.area.Clear()

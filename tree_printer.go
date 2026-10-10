@@ -1,6 +1,7 @@
 package pterm
 
 import (
+	"io"
 	"strings"
 )
 
@@ -28,7 +29,7 @@ var DefaultTree = TreePrinter{
 	HorizontalString:     "─",
 	TopRightDownString:   "├",
 	VerticalString:       "│",
-	RightDownLeftString:  "┬",
+	RightDownLeftString:  "",
 	Indent:               2,
 }
 
@@ -41,8 +42,12 @@ type TreePrinter struct {
 	TopRightDownString   string
 	HorizontalString     string
 	VerticalString       string
-	RightDownLeftString  string
-	Indent               int
+	// RightDownLeftString replaces the last HorizontalString in front of nodes
+	// that have children (e.g. "┬" renders "├─┬ parent" instead of "├── parent").
+	// If empty, the connector consists of HorizontalString only.
+	RightDownLeftString string
+	Indent              int
+	Writer              io.Writer
 }
 
 // WithTreeStyle returns a new list with a specific tree style.
@@ -81,6 +86,12 @@ func (p TreePrinter) WithVerticalString(s string) *TreePrinter {
 	return &p
 }
 
+// WithRightDownLeftString returns a new list with a specific RightDownLeftString.
+func (p TreePrinter) WithRightDownLeftString(s string) *TreePrinter {
+	p.RightDownLeftString = s
+	return &p
+}
+
 // WithRoot returns a new list with a specific Root.
 func (p TreePrinter) WithRoot(root TreeNode) *TreePrinter {
 	p.Root = root
@@ -93,14 +104,26 @@ func (p TreePrinter) WithIndent(indent int) *TreePrinter {
 	if indent < 1 {
 		indent = 1
 	}
+
 	p.Indent = indent
+
+	return &p
+}
+
+// WithWriter sets the Writer.
+func (p TreePrinter) WithWriter(writer io.Writer) *TreePrinter {
+	p.Writer = writer
 	return &p
 }
 
 // Render prints the list to the terminal.
 func (p TreePrinter) Render() error {
-	s, _ := p.Srender()
-	Println(s)
+	s, err := p.Srender()
+	if err != nil {
+		return err
+	}
+
+	Fprintln(p.Writer, s)
 
 	return nil
 }
@@ -110,76 +133,54 @@ func (p TreePrinter) Srender() (string, error) {
 	if p.TreeStyle == nil {
 		p.TreeStyle = NewStyle()
 	}
+
 	if p.TextStyle == nil {
 		p.TextStyle = NewStyle()
 	}
 
-	return walkOverTree(p.Root.Children, p, ""), nil
+	var result strings.Builder
+	if p.Root.Text != "" {
+		result.WriteString(p.TextStyle.Sprint(p.Root.Text))
+		result.WriteByte('\n')
+	}
+
+	result.WriteString(walkOverTree(p.Root.Children, p, ""))
+
+	return result.String(), nil
 }
 
 // walkOverTree is a recursive function,
 // which analyzes a TreePrinter and connects the items with specific characters.
 // Returns TreePrinter as string.
 func walkOverTree(list []TreeNode, p TreePrinter, prefix string) string {
-	var ret string
+	var ret strings.Builder
+
 	for i, item := range list {
-		if len(list) > i+1 { // if not last in list
-			if len(item.Children) == 0 { // if there are no children
-				ret += prefix + p.TreeStyle.Sprint(p.TopRightDownString) + strings.Repeat(p.TreeStyle.Sprint(p.HorizontalString), p.Indent) +
-					p.TextStyle.Sprint(item.Text) + "\n"
-			} else { // if there are children
-				ret += prefix + p.TreeStyle.Sprint(p.TopRightDownString) + strings.Repeat(p.TreeStyle.Sprint(p.HorizontalString), p.Indent-1) +
-					p.TreeStyle.Sprint(p.RightDownLeftString) + p.TextStyle.Sprint(item.Text) + "\n"
-				ret += walkOverTree(item.Children, p, prefix+p.TreeStyle.Sprint(p.VerticalString)+strings.Repeat(" ", p.Indent-1))
-			}
-		} else if len(list) == i+1 { // if last in list
-			if len(item.Children) == 0 { // if there are no children
-				ret += prefix + p.TreeStyle.Sprint(p.TopRightCornerString) + strings.Repeat(p.TreeStyle.Sprint(p.HorizontalString), p.Indent) +
-					p.TextStyle.Sprint(item.Text) + "\n"
-			} else { // if there are children
-				ret += prefix + p.TreeStyle.Sprint(p.TopRightCornerString) + strings.Repeat(p.TreeStyle.Sprint(p.HorizontalString), p.Indent-1) +
-					p.TreeStyle.Sprint(p.RightDownLeftString) + p.TextStyle.Sprint(item.Text) + "\n"
-				ret += walkOverTree(item.Children, p, prefix+strings.Repeat(" ", p.Indent))
-			}
-		}
-	}
-	return ret
-}
+		last := i == len(list)-1
 
-// NewTreeFromLeveledList converts a TreeItems list to a TreeNode and returns it.
-func NewTreeFromLeveledList(leveledListItems LeveledList) TreeNode {
-	if len(leveledListItems) == 0 {
-		return TreeNode{}
-	}
+		connector := p.TopRightDownString
+		childPrefix := prefix + p.TreeStyle.Sprint(p.VerticalString) + strings.Repeat(" ", p.Indent+1)
 
-	root := &TreeNode{
-		Children: []TreeNode{},
-		Text:     leveledListItems[0].Text,
-	}
-
-	for i, record := range leveledListItems {
-		last := root
-
-		if record.Level < 0 {
-			record.Level = 0
-			leveledListItems[i].Level = 0
+		if last {
+			connector = p.TopRightCornerString
+			childPrefix = prefix + strings.Repeat(" ", p.Indent+2)
 		}
 
-		if len(leveledListItems)-1 != i {
-			if leveledListItems[i+1].Level-1 > record.Level {
-				leveledListItems[i+1].Level = record.Level + 1
-			}
+		branch := strings.Repeat(p.HorizontalString, p.Indent)
+		if len(item.Children) > 0 && p.RightDownLeftString != "" {
+			branch = strings.Repeat(p.HorizontalString, max(p.Indent-1, 0)) + p.RightDownLeftString
 		}
 
-		for i := 0; i < record.Level; i++ {
-			lastIndex := len(last.Children) - 1
-			last = &last.Children[lastIndex]
+		ret.WriteString(prefix)
+		ret.WriteString(p.TreeStyle.Sprint(connector + branch))
+		ret.WriteByte(' ')
+		ret.WriteString(p.TextStyle.Sprint(item.Text))
+		ret.WriteByte('\n')
+
+		if len(item.Children) > 0 {
+			ret.WriteString(walkOverTree(item.Children, p, childPrefix))
 		}
-		last.Children = append(last.Children, TreeNode{
-			Children: []TreeNode{},
-			Text:     record.Text,
-		})
 	}
 
-	return *root
+	return ret.String()
 }

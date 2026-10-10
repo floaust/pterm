@@ -1,46 +1,34 @@
 package pterm
 
 import (
+	"io"
 	"strings"
 
 	"github.com/mattn/go-runewidth"
 
 	"github.com/pterm/pterm/internal"
+	"github.com/pterm/pterm/internal/color"
 )
 
 // Letters is a slice of Letter.
 type Letters []Letter
 
-// NewLettersFromString creates a Letters object from a string, which is prefilled with the LetterStyle from ThemeDefault.
-// You can override the ThemeDefault LetterStyle if you want to.
-func NewLettersFromString(text string) Letters {
-	return NewLettersFromStringWithStyle(text, &ThemeDefault.LetterStyle)
-}
-
-// NewLettersFromStringWithStyle creates a Letters object from a string and applies a Style to it.
-func NewLettersFromStringWithStyle(text string, style *Style) Letters {
-	s := strings.Split(text, "")
-	l := Letters{}
-
-	for _, s2 := range s {
-		l = append(l, Letter{
-			String: s2,
-			Style:  style,
-		})
-	}
-
-	return l
-}
-
 // Letter is an object, which holds a string and a specific Style for it.
 type Letter struct {
 	String string
 	Style  *Style
+	RGB    RGB
 }
 
 // WithStyle returns a new Letter with a specific Style.
 func (l Letter) WithStyle(style *Style) *Letter {
 	l.Style = style
+	return &l
+}
+
+// WithRGB returns a new Letter with a specific RGB color (overwrites style).
+func (l Letter) WithRGB(rgb RGB) *Letter {
+	l.RGB = rgb
 	return &l
 }
 
@@ -56,6 +44,7 @@ type BigTextPrinter struct {
 	// BigCharacters holds the map from a normal character to it's big version.
 	BigCharacters map[string]string
 	Letters       Letters
+	Writer        io.Writer
 }
 
 // WithBigCharacters returns a new BigTextPrinter with specific BigCharacters.
@@ -70,27 +59,38 @@ func (p BigTextPrinter) WithLetters(letters ...Letters) *BigTextPrinter {
 	for _, letter := range letters {
 		l = append(l, letter...)
 	}
+
 	p.Letters = l
+
+	return &p
+}
+
+// WithWriter sets the custom Writer.
+func (p BigTextPrinter) WithWriter(writer io.Writer) *BigTextPrinter {
+	p.Writer = writer
 	return &p
 }
 
 // Srender renders the BigText as a string.
 func (p BigTextPrinter) Srender() (string, error) {
-	var ret string
+	var ret strings.Builder
 
-	if RawOutput {
+	if rawOutput() {
 		for _, letter := range p.Letters {
-			ret += letter.String
+			ret.WriteString(letter.String)
 		}
-		return ret, nil
+
+		return ret.String(), nil
 	}
 
 	var bigLetters Letters
+
 	for _, l := range p.Letters {
 		if val, ok := p.BigCharacters[l.String]; ok {
 			bigLetters = append(bigLetters, Letter{
 				String: val,
 				Style:  l.Style,
+				RGB:    l.RGB,
 			})
 		}
 	}
@@ -109,25 +109,37 @@ func (p BigTextPrinter) Srender() (string, error) {
 			var letterLine string
 			letterLines := strings.Split(letter.String, "\n")
 			maxLetterWidth := internal.GetStringMaxWidth(letter.String)
+
 			if len(letterLines) > i {
 				letterLine = letterLines[i]
 			}
+
 			letterLineLength := runewidth.StringWidth(letterLine)
 			if letterLineLength < maxLetterWidth {
 				letterLine += strings.Repeat(" ", maxLetterWidth-letterLineLength)
 			}
-			ret += letter.Style.Sprint(letterLine)
+
+			if letter.RGB != (RGB{}) && (color.SupportsTrueColor() || internal.RunsInCi()) {
+				ret.WriteString(letter.RGB.Sprint(letterLine))
+			} else {
+				ret.WriteString(letter.Style.Sprint(letterLine))
+			}
 		}
-		ret += "\n"
+
+		ret.WriteByte('\n')
 	}
 
-	return ret, nil
+	return ret.String(), nil
 }
 
 // Render prints the BigText to the terminal.
 func (p BigTextPrinter) Render() error {
-	s, _ := p.Srender()
-	Println(s)
+	s, err := p.Srender()
+	if err != nil {
+		return err
+	}
+
+	Fprintln(p.Writer, s)
 
 	return nil
 }
@@ -545,5 +557,12 @@ var DefaultBigText = BigTextPrinter{
  ████  
        
       `,
+
+		"@": ` ██████  
+██    ██ 
+██ ██ ██ 
+██ ██ ██ 
+ █ ████  
+         `,
 	},
 }
